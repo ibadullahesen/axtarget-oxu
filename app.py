@@ -1,101 +1,85 @@
-from flask import Flask, request, send_file, render_template_string, after_this_request
-from TTS.api import TTS
+# app.py
 import os
-import uuid
+import tempfile
+import subprocess
+from flask import Flask, request, send_file, render_template_string, jsonify
+
+# Config from env
+MODEL_NAME = os.environ.get("MODEL_NAME", "")  # set this in Render settings (see README below)
+VOICE_GIRL = os.environ.get("VOICE_GIRL", "voice_girl")  # optional speaker token for advanced models
+VOICE_BOY  = os.environ.get("VOICE_BOY",  "voice_boy")
+PORT = int(os.environ.get("PORT", 5000))
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Modeli yükləyirik
-print("XTTS v2 modeli endirilir... (ilk dəfə 3-5 dəqiqə)")
-tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False, progress_bar=True)
-print("Model hazır! Səs klonlama aktivdir")
-
-HTML = """
-<!DOCTYPE html>
-<html>
+HTML_HOME = """
+<!doctype html>
+<html lang="az">
 <head>
-    <title>AxtarGet Voice – Səs Klonlama</title>
-    <meta charset="utf-8">
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AzTTS — Pulsuz TTS</title>
+  <meta name="description" content="Azərbaycanca mətn → insan tərzi səs (pulsuz, Render üzərində)."/>
+  <meta name="keywords" content="Azerbaijan TTS, Azərbaycan səsi, text to speech, pulsuz tts"/>
 </head>
-<body class="bg-gradient-to-br from-indigo-900 to-purple-900 min-h-screen flex items-center justify-center p-6">
-    <div class="bg-white/10 backdrop-blur-xl rounded-3xl p-12 max-w-5xl w-full shadow-2xl border border-white/20">
-        <h1 class="text-6xl font-black text-center bg-gradient-to-r from-cyan-400 to-pink-500 bg-clip-text text-transparent mb-6">
-            AxtarGet Voice
-        </h1>
-        <p class="text-2xl text-gray-200 text-center mb-10">5-15 saniyə öz səsinlə danış → istənilən mətni o səslə danışdır!</p>
-
-        <form method="post" enctype="multipart/form-data" class="space-y-10">
-            <div class="grid md:grid-cols-2 gap-10">
-                <div>
-                    <label class="block text-cyan-300 font-bold text-lg mb-4">1. Öz səsini yüklə (wav/mp3/ogg)</label>
-                    <input type="file" name="voice" accept="audio/*" required class="block w-full text-white file:mr-4 file:py-5 file:px-8 file:rounded-full file:border-0 file:bg-gradient-to-r file:from-cyan-600 file:to-purple-600 file:text-white file:font-bold text-lg">
-                </div>
-                <div>
-                    <label class="block text-pink-300 font-bold text-lg mb-4">2. Səsləndiriləcək mətn</label>
-                    <textarea name="text" rows="7" required placeholder="Salam qardaş, bu gün Bakıda hava necədir? Mən İbadullahəm, səs klonlama işləyir!" class="w-full px-6 py-5 rounded-2xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 text-lg"></textarea>
-                </div>
-            </div>
-            <button type="submit" class="w-full py-7 bg-gradient-to-r from-cyan-500 to-pink-600 text-white text-4xl font-black rounded-3xl hover:scale-105 transition duration-300 shadow-2xl">
-                SƏSLƏNDİR
-            </button>
-        </form>
-
-        {% if result %}
-        <div class="mt-16 p-10 bg-green-600/30 border-4 border-green-400 rounded-3xl text-center">
-            <p class="text-3xl text-green-300 font-bold mb-8">{{ result }}</p>
-            <audio controls class="w-full mb-8">
-                <source src="{{ url_for('download', filename=filename) }}" type="audio/wav">
-            </audio>
-            <br>
-            <a href="{{ url_for('download', filename=filename) }}" class="inline-block px-12 py-6 bg-green-600 text-white text-2xl font-bold rounded-2xl hover:bg-green-700 shadow-xl">
-                AUDIO ENDİR (.wav)
-            </a>
-        </div>
-        {% endif %}
-
-        <p class="text-center text-gray-500 mt-20 text-sm">© 2025 AxtarGet Voice – Azərbaycanın ən güclü səs klonlayıcısı</p>
-    </div>
+<body>
+  <h1>AzTTS</h1>
+  <form action="/speak" method="post">
+    <textarea name="text" rows="6" cols="60" placeholder="Mətni buraya yaz..."></textarea><br/>
+    <label><input type="radio" name="voice" value="girl" checked/> Qız səsi</label>
+    <label><input type="radio" name="voice" value="boy"/> Oğlan səsi</label><br/>
+    <button type="submit">Səsləndir</button>
+  </form>
+  <p>Qeyd: server Coqui TTS istifadə edir. Əgər MODEL_NAME boşdursa, admin modeli təyin etməlidir.</p>
 </body>
 </html>
 """
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def index():
-    if request.method == "POST":
-        voice_file = request.files["voice"]
-        text = request.form["text"].strip()
-        
-        if voice_file and text:
-            voice_path = os.path.join(UPLOAD_FOLDER, str(uuid.uuid4()) + ".wav")
-            output_path = os.path.join(UPLOAD_FOLDER, str(uuid.uuid4()) + ".wav")
-            
-            voice_file.save(voice_path)
-            
-            tts.tts_to_file(text=text, speaker_wav=voice_path, language="az", file_path=output_path)
-            
-            os.remove(voice_path)
-            
-            filename = os.path.basename(output_path)
-            return render_template_string(HTML, result="Səs uğurla klonlandı!", filename=filename)
-    
-    return render_template_string(HTML)
+    return render_template_string(HTML_HOME)
 
-@app.route("/download/<filename>")
-def download(filename):
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    if os.path.exists(file_path):
-        response = send_file(file_path, as_attachment=True, download_name="klonlanmis_ses.wav")
-        @after_this_request
-        def remove_file(resp):
-            try:
-                os.remove(file_path)
-            except:
-                pass
-            return resp
-        return response
-    return "Fayl tapılmadı", 404
+def synthesize_with_tts(model_name: str, text: str, speaker: str=None):
+    """
+    Uses Coqui TTS CLI to synthesize text to a temporary mp3 file, returns path.
+    Requires `tts` to be installed and model available (it will auto-download first time).
+    MODEL_NAME should be a valid model name from `tts --list_models`.
+    """
+    if not model_name:
+        raise RuntimeError("MODEL_NAME not configured. Set MODEL_NAME environment variable.")
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
+    os.close(tmp_fd)
+    cmd = ["tts", "--model_name", model_name, "--text", text, "--out_path", tmp_path]
+    if speaker:
+        # many Coqui models accept --speaker_wav or --speaker_idx depending on model
+        # we try a generic speaker param (may be ignored if model doesn't support).
+        cmd += ["--speaker_wav", speaker]  # best-effort; if not supported, CLI ignores or errors
+    # Run the CLI (blocking)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"TTS failed: {proc.returncode}\nstdout:{proc.stdout}\nstderr:{proc.stderr}")
+    return tmp_path
 
-# RENDER ÜÇÜN HEÇ NƏ YAZMA – Procfile ilə işləyəcək!
+@app.route("/speak", methods=["POST"])
+def speak():
+    text = request.form.get("text") or request.json.get("text","")
+    voice = request.form.get("voice") or request.json.get("voice","girl")
+    if not text:
+        return jsonify({"error":"No text provided"}), 400
+
+    # basic safety / length limit (avoid abuse)
+    if len(text) > 3000:
+        return jsonify({"error":"Text too long (limit 3000 chars)"}), 400
+
+    model = MODEL_NAME
+    speaker = VOICE_GIRL if voice == "girl" else VOICE_BOY
+    try:
+        mp3_path = synthesize_with_tts(model, text, speaker=speaker)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return send_file(mp3_path, mimetype="audio/mpeg", as_attachment=False, download_name="speech.mp3")
+
+if __name__ == "__main__":
+    # for local dev only; Render will use Gunicorn
+    app.run(host="0.0.0.0", port=PORT)
