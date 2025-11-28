@@ -1,4 +1,3 @@
-Flask
-coqui-tts
-torch
-torchaudio
+Flask==2.2.5
+coqui-tts==0.25.0
+gunicorn==21.2.0
