@@ -1,57 +1,53 @@
 from flask import Flask, request, send_file, render_template_string
-from gtts import gTTS
-import tempfile
+import torch
+from torch import inference_mode
+from transformers import pipeline
+import uuid
 import os
 
 app = Flask(__name__)
 
+# Az dilində yüngül model
+pipe = pipeline("text-to-speech", model="facebook/mms-tts-az", device="cpu")
+
 HTML = """
-<!doctype html>
+<!DOCTYPE html>
 <html lang="az">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>AzTTS — Azərbaycan dilində TTS</title>
-  <meta name="description" content="Azərbaycan dilində mətnin səsə çevrilməsi — pulsuz TTS.">
-  <meta name="keywords" content="tts, azerbaijan tts, text to speech, azərbaycanca səs">
+<meta charset="UTF-8">
+<title>AxtarGet TTS</title>
+<style>
+body {font-family: Arial; background:#111; color:#eee; text-align:center; padding:40px;}
+input, textarea {width:90%%; padding:12px; border-radius:12px; border:none; margin-top:10px;}
+button {margin-top:20px; padding:15px 40px; background:#00ff88; border:none; border-radius:12px; font-size:18px; cursor:pointer;}
+.container {max-width:500px; margin:auto; background:#222; padding:30px; border-radius:20px;}
+</style>
 </head>
 <body>
-  <h1>AzTTS</h1>
-  <form action="/speak" method="post">
-    <textarea name="text" rows="6" cols="60" placeholder="Mətni yaz..."></textarea><br>
-    <label><input type="radio" name="voice" value="girl" checked> Qız səsi</label>
-    <label><input type="radio" name="voice" value="boy"> Oğlan səsi</label><br><br>
-    <button type="submit">Səsləndir</button>
-  </form>
+<div class="container">
+<h2>AxtarGet – Mətn → Səs</h2>
+<form action="/tts" method="post">
+<textarea name="text" rows="5" placeholder="Mətni yaz..."></textarea>
+<button type="submit">Səsi Yarat</button>
+</form>
+</div>
 </body>
 </html>
 """
 
-@app.route("/", methods=["GET"])
-def index():
-    return HTML
+@app.route("/")
+def home():
+    return render_template_string(HTML)
 
-@app.route("/speak", methods=["POST"])
-def speak():
-    text = request.form.get("text", "").strip()
-    voice = request.form.get("voice", "girl")
-
+@app.route("/tts", methods=["POST"])
+def tts():
+    text = request.form.get("text")
     if not text:
-        return "Mətn daxil edilməyib."
+        return "Mətn tapılmadı"
 
-    if len(text) > 3000:
-        return "Mətn çox uzundur. Limit: 3000."
+    out = pipe(text)
+    file_id = str(uuid.uuid4()) + ".mp3"
+    with open(file_id, "wb") as f:
+        f.write(out["audio"])
 
-    # Qız səsi → Azərbaycan
-    # Oğlan səsi → Türkiyə ləhcəsi kimi fərqli ton (Google workaround)
-    lang = "az" if voice == "girl" else "tr"
-
-    tts = gTTS(text=text, lang=lang, slow=False)
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    tts.save(tmp.name)
-
-    return send_file(tmp.name, mimetype="audio/mpeg", as_attachment=False)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    return send_file(file_id, mimetype="audio/mpeg")
