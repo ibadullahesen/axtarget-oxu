@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azərbaycan Mətn-Səs Çevirici</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Azərbaycan Mətn-Səs Çevirici</h1>
+            <p>Mətninizi yazın və Azərbaycan dilində dinləyin</p>
+        </header>
+
+        <div class="main-content">
+            <div class="input-section">
+                <textarea 
+                    id="textInput" 
+                    placeholder="Mətninizi buraya yazın... (Azərbaycan dilində)"
+                    rows="8"
+                ></textarea>
+                
+                <div class="controls">
+                    <button id="convertBtn" class="btn btn-primary">
+                        Səsə Çevir
+                    </button>
+                    <button id="playBtn" class="btn btn-secondary" disabled>
+                        Dinlə
+                    </button>
+                    <button id="clearBtn" class="btn btn-outline">
+                        Təmizlə
+                    </button>
+                </div>
+            </div>
+
+            <div class="output-section">
+                <div id="statusMessage" class="status-message"></div>
+                <audio id="audioPlayer" controls style="display: none;"></audio>
+            </div>
+        </div>
+
+        <footer>
+            <p>Powered by Flask & gTTS | Azərbaycan dili dəstəyi</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
