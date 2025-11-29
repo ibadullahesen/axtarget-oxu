@@ -43,6 +43,18 @@
         <footer>
             <p>Powered by Flask & gTTS | Azərbaycan dili dəstəyi</p>
         </footer>
+        <!-- Sonda bu hissəni əlavə edin -->
+<script>
+// Əgər JavaScript aktiv deyilsə, istifadəçini xəbərdar et
+document.addEventListener('DOMContentLoaded', function() {
+    const convertBtn = document.getElementById('convertBtn');
+    if (convertBtn) {
+        console.log('Tətbiq uğurla yükləndi');
+    } else {
+        alert('Xəta: Tətbiq düzgün yüklənmədi. Zəhmət olmasa səhifəni yeniləyin.');
+    }
+});
+</script>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
