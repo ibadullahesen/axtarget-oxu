@@ -1,47 +1,75 @@
-from flask import Flask, request, send_file, render_template_string
+from flask import Flask, render_template, request, jsonify, send_file
 from gtts import gTTS
-import uuid
 import os
+import tempfile
+import uuid
+from datetime import datetime
 
 app = Flask(__name__)
 
-HTML = """
-<!DOCTYPE html>
-<html lang="az">
-<head>
-<meta charset="UTF-8">
-<title>AxtarGet TTS</title>
-<style>
-body {font-family: Arial; background:#111; color:#eee; padding:40px;}
-input, textarea {width:90%; padding:12px; border-radius:12px; border:none; margin-top:10px;}
-button {margin-top:20px; padding:15px 40px; background:#00ff88; border:none; border-radius:12px; font-size:18px; cursor:pointer;}
-.container {max-width:500px; margin:auto; background:#222; padding:30px; border-radius:20px;}
-</style>
-</head>
-<body>
-<div class="container">
-<h2>AxtarGet – Mətn → Səs (AZ)</h2>
-<form action="/tts" method="post">
-<textarea name="text" rows="5" placeholder="Mətni yaz..."></textarea>
-<button type="submit">Səsi Yarat</button>
-</form>
-</div>
-</body>
-</html>
-"""
+# Ses fayllarını saxlamaq üçün müvəqqəti qovluq
+AUDIO_FOLDER = 'static/audio'
+if not os.path.exists(AUDIO_FOLDER):
+    os.makedirs(AUDIO_FOLDER)
 
-@app.route("/")
-def home():
-    return render_template_string(HTML)
+def text_to_speech_az(text, filename):
+    """
+    Azərbaycan dilində mətni səsə çevirir
+    """
+    try:
+        tts = gTTS(text=text, lang='az', slow=False)
+        filepath = os.path.join(AUDIO_FOLDER, filename)
+        tts.save(filepath)
+        return filepath
+    except Exception as e:
+        print(f"Xəta: {e}")
+        return None
 
-@app.route("/tts", methods=["POST"])
-def tts():
-    text = request.form.get("text")
-    if not text:
-        return "Mətn tapılmadı"
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-    file_id = str(uuid.uuid4()) + ".mp3"
-    tts = gTTS(text=text, lang="az")
-    tts.save(file_id)
+@app.route('/convert', methods=['POST'])
+def convert_text_to_speech():
+    try:
+        data = request.get_json()
+        text = data.get('text', '').strip()
+        
+        if not text:
+            return jsonify({'success': False, 'error': 'Boş mətn daxil edildi'})
+        
+        # Unikal fayl adı yarat
+        filename = f"speech_{uuid.uuid4().hex}.mp3"
+        filepath = text_to_speech_az(text, filename)
+        
+        if filepath:
+            return jsonify({
+                'success': True, 
+                'audio_url': f'/{filepath}',
+                'filename': filename
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Səs yaradılarkən xəta baş verdi'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
-    return send_file(file_id, mimetype="audio/mpeg")
+@app.route('/static/audio/<filename>')
+def serve_audio(filename):
+    return send_file(f'static/audio/{filename}')
+
+# Təmizlik: köhnə audio fayllarını sil
+def cleanup_old_files():
+    try:
+        current_time = datetime.now()
+        for filename in os.listdir(AUDIO_FOLDER):
+            filepath = os.path.join(AUDIO_FOLDER, filename)
+            file_time = datetime.fromtimestamp(os.path.getctime(filepath))
+            if (current_time - file_time).seconds > 3600:  # 1 saatdan köhnə faylları sil
+                os.remove(filepath)
+    except Exception as e:
+        print(f"Təmizlik xətası: {e}")
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
