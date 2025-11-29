@@ -1,11 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_file
 from gtts import gTTS
 import os
-import tempfile
 import uuid
-from datetime import datetime
-import threading
-import time
 
 app = Flask(__name__)
 
@@ -13,20 +9,6 @@ app = Flask(__name__)
 AUDIO_FOLDER = 'static/audio'
 if not os.path.exists(AUDIO_FOLDER):
     os.makedirs(AUDIO_FOLDER)
-
-# Təmizlik funksiyası
-def cleanup_old_files():
-    """Köhnə audio fayllarını təmizlə"""
-    try:
-        current_time = time.time()
-        for filename in os.listdir(AUDIO_FOLDER):
-            filepath = os.path.join(AUDIO_FOLDER, filename)
-            # 1 saatdan köhnə faylları sil
-            if os.path.getctime(filepath) < current_time - 3600:
-                os.remove(filepath)
-                print(f"Silindi: {filename}")
-    except Exception as e:
-        print(f"Təmizlik xətası: {e}")
 
 def text_to_speech_az(text, filename):
     """
@@ -83,20 +65,6 @@ def health_check():
     """Sağlamlıq yoxlaması üçün endpoint"""
     return jsonify({'status': 'healthy', 'service': 'Azərbaycan Text-to-Speech'})
 
-# Server başlayanda təmizlik işini başlat
-@app.before_first_request
-def startup_tasks():
-    def cleanup_loop():
-        while True:
-            cleanup_old_files()
-            time.sleep(3600)  # Hər saat bir dəfə təmizlə
-    
-    # Təmizlik thread-ni başlat (yalnız productionda)
-    if not os.environ.get('DEBUG'):
-        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
-        cleanup_thread.start()
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    app.run(host='0.0.0.0', port=port)
